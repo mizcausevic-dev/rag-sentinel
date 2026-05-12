@@ -12,7 +12,8 @@ This log is intentionally written as an engineering record rather than a launch 
 - Tightened the repo story around the real-world operating problem: rising RAG hallucination rates, weak citation quality, and silent retrieval drift.
 
 ### Why this mattered
-- Existing approaches in observability stacks, vector dashboards, and model evaluation tools were useful, but they could report latency or cost, but not whether retrieval quality was degrading in a way operators could actually govern.
+- Existing approaches in observability stacks, vector dashboards, and model evaluation tools were useful for adjacent workflows.
+- They still missed the core need: a reviewable operating layer for retrieval quality, citation integrity, and corpus drift.
 - This release made the repo readable as an operational capability rather than a narrow technical demo.
 
 ## [0.1.0] - 2026-02-15
