@@ -5,15 +5,15 @@
 [![TypeScript](https://img.shields.io/badge/typescript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-66FCF1)](LICENSE)
 
-Governance and observability layer for **enterprise RAG systems** — chunk quality scoring, source freshness audits, retrieval drift detection, hallucination signals, and PII leakage scanning across every collection your platform indexes.
+Governance and observability layer for **enterprise RAG systems**: chunk quality scoring, source freshness audits, retrieval drift detection, hallucination signals, and PII leakage scanning across every indexed collection.
 
-> Recruiter takeaway:
+> **What this repo proves**
 >
-> *"This person is solving the part of enterprise RAG that everyone ships and nobody monitors. The retrieval surface needs the same governance discipline as the tool surface — and they actually built it."*
+> RAG reliability is not just a model-quality problem. It is an evidence, retrieval, and governance problem, and this repo treats it that way.
 
 ## Why This Exists
 
-Most enterprise AI failures aren't model failures — they're **retrieval failures**. Stale documentation that contradicts current product behavior. Chunks that start mid-sentence and degrade relevance. API keys accidentally indexed into the vector store. Top-K results silently shifting after an embedding model upgrade. None of this is visible until a customer sees something wrong in production.
+Most enterprise AI failures aren't model failures â€” they're **retrieval failures**. Stale documentation that contradicts current product behavior. Chunks that start mid-sentence and degrade relevance. API keys accidentally indexed into the vector store. Top-K results silently shifting after an embedding model upgrade. None of this is visible until a customer sees something wrong in production.
 
 RAG Sentinel is the layer that watches all of it. It scores chunks at index time, audits sources for staleness, detects retrieval drift across snapshots, evaluates answer grounding, and scans indexed content for PII. Output is operator-friendly: per-collection posture scores, blocked-content lists, top issues by frequency, and a Monday-morning dashboard that fits on one screen.
 
@@ -24,7 +24,7 @@ RAG Sentinel is the layer that watches all of it. It scores chunks at index time
 | [`mcp-sentinel`](https://github.com/mizcausevic-dev/mcp-sentinel) | Tool calls | *What MCP tools are exposed and how risky are they?* |
 | **`rag-sentinel`** | **Retrieval** | ***What's in the vector store and how trustworthy is it?*** |
 | [`agent-codex`](https://github.com/mizcausevic-dev/agent-codex) | Decisions | *Under what policies are decisions allowed?* |
-| [`agentobserve`](https://github.com/mizcausevic-dev/agentobserve) | Runtime | *What did agents actually do — cost, latency, outcomes?* |
+| [`agentobserve`](https://github.com/mizcausevic-dev/agentobserve) | Runtime | *What did agents actually do â€” cost, latency, outcomes?* |
 | [`kinetic-flightdeck`](https://github.com/mizcausevic-dev/kinetic-flightdeck) | Operator | *Are we OK right now? Who do I call?* |
 
 ## Project Overview
@@ -34,8 +34,8 @@ RAG Sentinel is the layer that watches all of it. It scores chunks at index time
 | Runtime | Node.js + TypeScript |
 | Framework | Express 5 |
 | Domain | Enterprise RAG governance and observability |
-| Validation Areas | Chunk quality · Source freshness · Retrieval drift · Hallucination signals · PII/sensitive content |
-| Operational Outputs | Per-chunk scores · Per-collection posture · Drift comparisons · Blocked-content lists · Open-incident view |
+| Validation Areas | Chunk quality Â· Source freshness Â· Retrieval drift Â· Hallucination signals Â· PII/sensitive content |
+| Operational Outputs | Per-chunk scores Â· Per-collection posture Â· Drift comparisons Â· Blocked-content lists Â· Open-incident view |
 | Docs | OpenAPI spec embedded; routes self-documented |
 
 ## Five Governance Pillars
@@ -52,9 +52,9 @@ Bad chunks lead to bad retrievals. Scored at index time:
 ### 2. Source Freshness Audit
 
 Stale RAG content is the silent killer. Bucket distribution + weighted score:
-- `fresh` (≤30 days, weight 100)
-- `aging` (31–90 days, weight 75)
-- `stale` (91–365 days, weight 30)
+- `fresh` (â‰¤30 days, weight 100)
+- `aging` (31â€“90 days, weight 75)
+- `stale` (91â€“365 days, weight 30)
 - `ancient` (>365 days, weight 0)
 
 ### 3. Retrieval Drift Detection
@@ -65,7 +65,7 @@ Same query returning different results over time. Compares two retrieval snapsho
 - New / dropped chunk identification
 - Embedding-model-change detection (drift expected, validation required)
 
-Drift levels: `minimal` · `moderate` · `significant` · `severe`
+Drift levels: `minimal` Â· `moderate` Â· `significant` Â· `severe`
 
 ### 4. Hallucination Signals
 
@@ -98,7 +98,7 @@ Severity-weighted blocking decision: `critical` and `high` hits trigger automati
 | Chunk quality | 0.15 | Index-time investment |
 | Retrieval drift | 0.15 | Detected stability of the surface |
 
-Override logic: a single critical signal (PII crisis, freshness crisis, hallucination crisis) **forces blocked status** regardless of composite — the same "platform thinking" doctrine used in `mcp-sentinel` and `kinetic-flightdeck`.
+Override logic: a single critical signal (PII crisis, freshness crisis, hallucination crisis) **forces blocked status** regardless of composite â€” the same "platform thinking" doctrine used in `mcp-sentinel` and `kinetic-flightdeck`.
 
 ## API Endpoints
 
@@ -191,7 +191,7 @@ POST /api/validate/pii-scan
 
 ## Operator Console Preview
 
-![RAG Sentinel operator console — KPIs, collection posture, retrieval drift, freshness, and incident timeline](docs/hero.png)
+![RAG Sentinel operator console â€” KPIs, collection posture, retrieval drift, freshness, and incident timeline](docs/hero.png)
 
 ## Getting Started
 
@@ -228,7 +228,7 @@ npm test
 - RAG governance translated into enforceable, testable backend rules
 - Heuristic-but-defensible analysis of grounding without requiring LLM calls in the loop
 - Composite scoring that respects platform-engineering doctrine (sensitive content + hallucination dominate)
-- Override logic — a single critical signal blocks regardless of good composites
+- Override logic â€” a single critical signal blocks regardless of good composites
 - Pluggable validation endpoints designed to wire into indexing pipelines and answer pipelines
 - Strict-mode TypeScript with full test coverage; CI matrix on Node 20 + 22
 
@@ -254,8 +254,8 @@ npm test
 - [Medium](https://medium.com/@mizcausevic)
 - [GitHub](https://github.com/mizcausevic-dev)
 
-Part of [mizcausevic-dev's GitHub portfolio](https://github.com/mizcausevic-dev) — AI Platform Engineering quintet.
+Part of [mizcausevic-dev's GitHub portfolio](https://github.com/mizcausevic-dev) â€” AI Platform Engineering quintet.
 
 ---
 
-**Connect:** [LinkedIn](https://www.linkedin.com/in/mirzacausevic/) · [Kinetic Gain](https://kineticgain.com) · [Medium](https://medium.com/@mizcausevic/) · [Skills](https://mizcausevic.com/skills/)
+**Connect:** [LinkedIn](https://www.linkedin.com/in/mirzacausevic/) Â· [Kinetic Gain](https://kineticgain.com) Â· [Medium](https://medium.com/@mizcausevic/) Â· [Skills](https://mizcausevic.com/skills/)
