@@ -1,70 +1,41 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project are documented here.
-
-This log is intentionally written as an engineering record rather than a launch theater timeline. Dates reflect when the concept, design, prototype, and public packaging phases were mature enough to document.
 
 ## [1.0.0] - 2026-05-12
 
 ### Released
-- Published **rag-sentinel** as a public, portfolio-grade RAG reliability system.
-- Packaged the current implementation, documentation, validation workflow, and proof surfaces into a repo that could be reviewed by engineering, product, and operating stakeholders.
-- Tightened the repo story around the real-world operating problem: rising RAG hallucination rates, weak citation quality, and silent retrieval drift.
+- Published **rag-sentinel** as the public operating surface for enterprise RAG reliability.
+- Packaged chunk scoring, freshness audits, retrieval drift detection, hallucination indicators, and PII leakage review into one reviewable repo.
+- Tightened the product story around a problem most teams were already feeling: retrieval systems were shipping faster than the controls around evidence quality.
 
 ### Why this mattered
-- Existing approaches in observability stacks, vector dashboards, and model evaluation tools were useful for adjacent workflows.
-- They still missed the core need: a reviewable operating layer for retrieval quality, citation integrity, and corpus drift.
-- This release made the repo readable as an operational capability rather than a narrow technical demo.
+- By 2024 and 2025, many teams could instrument prompts and latency, but still could not explain why answer quality degraded after a corpus refresh.
+- Existing observability stacks were useful for throughput and uptime, but they were not built to answer retrieval questions like citation integrity, stale chunks, or silent semantic drift.
+- This release made the repo legible to AI platform, security, and knowledge-system teams evaluating practical controls for RAG.
 
-## [0.1.0] - 2026-02-15
+## [0.1.0] - 2026-02-18
 
 ### Shipped
-- Cut the first coherent internal version of the product shape behind **rag-sentinel**.
-- Standardized the core objects, decision surfaces, and operator outputs around the repo's main working problem.
-- Established the first reviewable version of the architecture described as: Governance and observability layer for enterprise RAG systems. Chunk quality scoring, source freshness audits, retrieval drift detection, hallucination signals, and PII leakage scanning across every collection.
+- Standardized the first internal model for collection health, retrieval quality, and source-evidence review.
+- Added a coherent operator workflow for deciding whether a system was safe to trust, safe to tune, or safe to pause.
+- Framed the project around measurable failure modes rather than vague "AI quality" language.
 
-### Notes
-- This milestone was less about polish and more about proving the operating model.
-- The emphasis was on turning a messy domain problem into something a real team could reason about in CI, review, or day-to-day operations.
-
-## [Prototype] - 2025-02-11
+## [Prototype] - 2025-05-09
 
 ### Built
-- Created the first runnable prototype for the repo's core workflow and decision model.
-- Started validating the design against real operating pressures instead of idealized sample flows.
-- Added enough shape to test whether the project could surface action, not just information.
+- Built the first prototype around retrieval drift, hallucination pressure, and source freshness checks.
+- Tested whether the repo could surface a useful review queue instead of another passive dashboard.
 
-### Problem pressure
-- The prototype phase was shaped by concrete issues such as RAG hallucination rates, stale retrieval context, and citation-quality breakdowns.
-- This was the point where the project moved from a sketch into something worth hardening.
-
-## [Design Phase] - 2023-09-08
+## [Design Phase] - 2024-01-22
 
 ### Designed
-- Defined the core philosophy for the system:
-  - operator-first
-  - decision-legible
-  - CI- and review-friendly
-  - suitable for mixed technical and business audiences
-- Chose outputs that would make the repo useful to real operators instead of just visually impressive.
-- Focused the design on explainability, evidence, and next-best action rather than passive reporting.
+- Chose an operator-first model: evidence before style, explainability before novelty.
+- Grounded the design in real problems such as RAG hallucination rates, stale embeddings, and weak citation review.
+- Kept the outputs CI-friendly so the repo could live in release and governance workflows.
 
-### Rejected approaches
-- Avoided turning the repo into a generic dashboard or CRUD exercise.
-- Avoided thin wrapper patterns that would hide the actual operating problem behind fashionable tooling choices.
-
-## [Idea Origin] - 2023-02-08
+## [Idea Origin] - 2023-03-14
 
 ### Observed
-- The initial idea surfaced while looking at how teams were handling rising RAG hallucination rates, weak citation quality, and silent retrieval drift.
-- The recurring pattern was that people could often see fragments of the problem, but not the whole operational story in one place.
-
-### Insight
-- The missing product was not another point solution. It was a clearer operating layer that made the work legible to AI platform and knowledge-system teams.
-- That insight became the basis for **rag-sentinel**.
-
-## [Background Signals] - 2022-08-09
-
-### Context
-- Earlier platform, governance, and operator-tooling work made one pattern obvious: the dangerous systems are rarely the ones with no controls at all. They are the ones where controls exist, but are fragmented, weakly owned, and hard to read under pressure.
-- That pattern shaped this project long before the public repo existed.
+- The initial concept came from repeated cases where retrieval systems looked healthy in infrastructure terms while answer quality was quietly deteriorating.
+- The missing product was not another vector search demo. It was a review layer for evidence quality.
