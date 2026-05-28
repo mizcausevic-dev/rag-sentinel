@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { env } from './config/env';
 import { validateRouter } from './routes/validate';
 import { collectionsRouter, incidentsRouter, dashboardRouter } from './routes/index';
+import { vaultRouter } from './routes/vault';
 
 export const app = express();
 const startedAt = Date.now();
@@ -27,6 +28,7 @@ app.use('/api/validate', validateRouter);
 app.use('/api/collections', collectionsRouter);
 app.use('/api/incidents', incidentsRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/vault', vaultRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Not found' });

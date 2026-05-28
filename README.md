@@ -88,6 +88,67 @@ Catches leakage before it ends up in retrieval results:
 
 Severity-weighted blocking decision: `critical` and `high` hits trigger automatic block.
 
+### 5b. Tokenize-before-index (Skyyflow integration)
+
+The blocking model above answers *"is this content safe to index?"* The Skyyflow vault integration answers a different question: *"can this content be **made** safe to index by replacing the PII with tokens?"*
+
+When a buyer publishes an [AI Procurement Decision Card v0.2](https://github.com/mizcausevic-dev/ai-procurement-decision-spec) that lists `data_vault_targets[]` with `vendor: "skyyflow"`, rag-sentinel:
+
+1. **At index time** — replaces the matched PII values (email, phone, SSN, credit card, IBAN — never credentials or auth secrets) with opaque vault tokens. The chunk text is rewritten with tokens; the embedding stays semantically valid; the vector store never sees raw PII.
+2. **At query time** — calls `detokenize()` with the caller's roles. If any of the caller's roles is in the Decision Card's `reveal_roles[]`, tokens become raw values; otherwise the response carries tokens through and an audit event is emitted.
+
+Two vault implementations ship in the box:
+
+| Implementation | When it's selected | Notes |
+|---|---|---|
+| `MockSkyyflowVault` | Default — when env is not configured | In-memory + deterministic. Same input → same token across calls. For tests, screenshots, demos. |
+| `RealSkyyflowVault` | When `SKYYFLOW_VAULT_URL` + `SKYYFLOW_ACCESS_TOKEN` + `SKYYFLOW_VAULT_ID` are set | HTTP adapter to a hosted vault. Caller is responsible for token refresh. |
+
+Credentials and auth secrets (private keys, AWS access keys, JWT tokens, API keys) are **never tokenized** — they continue to block the chunk regardless of Decision Card target. That distinction is intentional: tokenizing a credential just makes it slightly harder to find while shipping it into a vector store anyway.
+
+Two HTTP endpoints expose the integration:
+
+```
+GET  /api/vault/status                      mock vs real vault, vault id, env-toggle hint
+POST /api/vault/preview                     decisionCard + chunks → vaulted text + substitution audit
+POST /api/vault/detokenize-preview          decisionCard + tokens + callerRoles → reveal disposition
+```
+
+Example — `POST /api/vault/preview`:
+
+```jsonc
+// Request
+{
+  "decisionCard": { /* a Decision Card v0.2 document */ },
+  "chunks": [
+    { "chunkId": "c1", "text": "Contact jane@example.com; SSN 123-45-6789 on file." }
+  ]
+}
+
+// Response (mock vault, truncated tokens for readability)
+{
+  "decisionId": "DEMO-1",
+  "decisionCardVersion": "0.2",
+  "vaultVendor": "skyyflow",
+  "vaultMode": "mock",
+  "vaultId": "v_demo",
+  "fieldsAuthorized": ["email", "ssn"],
+  "revealRoles": ["principal"],
+  "chunks": [
+    {
+      "chunkId": "c1",
+      "vaultedText": "Contact skyy_c845…; SSN skyy_277a… on file.",
+      "substitutions": [
+        { "patternName": "email",  "token": "skyy_c845…", "field": "email" },
+        { "patternName": "ssn-us", "token": "skyy_277a…", "field": "ssn"   }
+      ],
+      "unauthorizedHits": [],
+      "shouldBlock": false
+    }
+  ]
+}
+```
+
 ## Composite Posture Methodology
 
 | Pillar | Weight | Rationale |
@@ -111,6 +172,9 @@ Override logic: a single critical signal (PII crisis, freshness crisis, hallucin
 | GET | `/api/collections/:id` | Single collection metadata + metrics |
 | GET | `/api/collections/:id/posture` | Composite posture score for collection |
 | GET | `/api/incidents` | Filtered incident feed (collectionId, severity, status, category) |
+| GET | `/api/vault/status` | Mock vs real Skyyflow vault, vault id, env-toggle hint |
+| POST | `/api/vault/preview` | Decision Card v0.2 + chunks → vaulted text + substitution audit |
+| POST | `/api/vault/detokenize-preview` | Decision Card v0.2 + tokens + callerRoles → reveal disposition |
 | GET | `/api/dashboard/summary` | Operator headline view |
 
 ### Validate

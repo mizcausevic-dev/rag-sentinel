@@ -1,6 +1,6 @@
 {
   "name": "rag-sentinel",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "RAG governance and observability — chunk quality scoring, retrieval drift detection, hallucination signals, source freshness audits, and PII leakage scanning across enterprise RAG collections.",
   "main": "dist/index.js",
   "scripts": {
