@@ -1,5 +1,10 @@
 # RAG Sentinel
 
+[![Live demo: RAG Injection Scanner](docs/demo-preview.png)](https://ragscan.kineticgain.com)
+
+**Live demo:** [https://ragscan.kineticgain.com](https://ragscan.kineticgain.com) . Client-side, zero data egress.
+
+
 [![CI](https://github.com/mizcausevic-dev/rag-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/mizcausevic-dev/rag-sentinel/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/typescript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
