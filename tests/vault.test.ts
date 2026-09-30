@@ -100,6 +100,16 @@ test('MockSkyyflowVault: detokenizing an unknown token is denied without leaking
   assert.equal(d.value, null);
 });
 
+test('MockSkyyflowVault: token cannot be revealed as a different field', async () => {
+  const vault = new MockSkyyflowVault();
+  const [email] = await vault.tokenize([{ field: 'email', value: 'jane@example.com' }]);
+  const [result] = await vault.detokenize(
+    [{ field: 'ssn', token: email.token }],
+    { callerRoles: ['principal'], revealRoles: ['principal'] }
+  );
+  assert.equal(result.value, null);
+});
+
 test('vaultChunk: replaces email and SSN PII with tokens, leaves text otherwise intact', async () => {
   const vault = new MockSkyyflowVault();
   const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
@@ -154,4 +164,14 @@ test('vaultChunk: same input is tokenized deterministically (same token across c
   const a = await vaultChunk('c-a', 'Contact: jane@example.com', target, vault);
   const b = await vaultChunk('c-b', 'Contact: jane@example.com', target, vault);
   assert.equal(a.substitutions[0].token, b.substitutions[0].token);
+});
+
+test('vaultChunk: tokenizes every distinct PII value before allowing indexing', async () => {
+  const vault = new MockSkyyflowVault();
+  const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
+  const r = await vaultChunk('multi-email', 'Contact jane@example.com and pat@example.com.', target, vault);
+  assert.equal(r.substitutions.length, 2);
+  assert.ok(!r.vaultedText.includes('jane@example.com'));
+  assert.ok(!r.vaultedText.includes('pat@example.com'));
+  assert.equal(r.shouldBlock, false);
 });

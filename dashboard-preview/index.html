@@ -4,19 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RAG Sentinel — Retrieval Surface Governance Console</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0B0C10;
     --panel: #1F2833;
     --text: #C5C6C7;
-    --text-dim: #8a8d92;
+    --text-dim: #94979c;
     --accent: #66FCF1;
     --accent-2: #45A29E;
     --green: #2dd4a8;
     --yellow: #f4c542;
     --orange: #f4843a;
-    --red: #ef4444;
+    --red: #ff6b6b;
     --border: #2c3340;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,11 +45,12 @@
   }
   .timestamp { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); }
 
-  .headline-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin-bottom: 32px; }
+  .headline-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .demo-notice { padding: 12px 16px; margin: 0 0 24px; border: 1px solid var(--yellow); border-radius: 8px; color: var(--text); background: var(--panel); font-size: 14px; }
   .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
   .kpi-label {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -79,8 +79,9 @@
   }
   .section-header .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); }
 
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  table { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; }
+  table { width: 100%; min-width: 900px; border-collapse: collapse; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  caption { text-align: left; padding: 8px 16px; color: var(--text-dim); }
   th {
     text-align: left;
     padding: 12px 16px;
@@ -93,8 +94,8 @@
     border-bottom: 1px solid var(--border);
   }
   td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
-  tr:last-child td { border-bottom: none; }
-  td.entity-name { color: var(--text); font-weight: 500; }
+  tr:last-child td, tr:last-child th[scope="row"] { border-bottom: none; }
+  th[scope="row"] { background: transparent; color: var(--text); text-transform: none; letter-spacing: normal; font-size: 12px; font-weight: 500; }
   td.score { font-weight: 700; }
   td.score.good { color: var(--green); }
   td.score.warn { color: var(--yellow); }
@@ -179,6 +180,14 @@
     font-family: 'JetBrains Mono', monospace;
     text-align: center;
   }
+  a:focus-visible { outline: 3px solid var(--yellow); outline-offset: 4px; }
+  @media (max-width: 700px) {
+    body { padding: 20px 12px; }
+    .brand { flex-wrap: wrap; }
+    .grid-two { grid-template-columns: 1fr; }
+    .timeline-item { display: block; }
+    .timeline-item > div { margin-bottom: 6px; }
+  }
 </style>
 </head>
 <body>
@@ -190,9 +199,13 @@
     <span class="sub">Retrieval Surface Governance Console</span>
   </div>
   <div class="timestamp">
-    Generated 2026-05-07T22:00:00Z · Vector stores: pinecone · qdrant · weaviate · pgvector
+    Illustrative snapshot dated 2026-05-07 · Example vector-store labels: pinecone · qdrant · weaviate · pgvector
   </div>
 </header>
+
+<p class="demo-notice"><strong>Static demo.</strong> All collections, metrics, incidents, dates, and integration labels below are synthetic. This page does not connect to a live RAG system.</p>
+
+<main>
 
 <!-- Headline KPIs -->
 <div class="headline-grid">
@@ -241,24 +254,25 @@
   </div>
   <div class="panel">
     <table>
+      <caption>Synthetic collection posture. On narrow screens, scroll the table horizontally.</caption>
       <thead>
         <tr>
-          <th>Collection</th>
-          <th>Domain</th>
-          <th>Owner</th>
-          <th>Env</th>
-          <th>Quality</th>
-          <th>Fresh</th>
-          <th>Drift</th>
-          <th>Halluc</th>
-          <th>PII</th>
-          <th>Composite</th>
-          <th>Status</th>
+          <th scope="col">Collection</th>
+          <th scope="col">Domain</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Env</th>
+          <th scope="col">Quality</th>
+          <th scope="col">Fresh</th>
+          <th scope="col">Drift</th>
+          <th scope="col">Halluc</th>
+          <th scope="col">PII</th>
+          <th scope="col">Composite</th>
+          <th scope="col">Status</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td class="entity-name">Legacy Confluence Mirror</td>
+          <th scope="row" class="entity-name">Legacy Confluence Mirror</th>
           <td>general</td>
           <td>platform-ops</td>
           <td><span class="badge production">prod</span></td>
@@ -271,7 +285,7 @@
           <td><span class="badge blocked">blocked</span></td>
         </tr>
         <tr>
-          <td class="entity-name">Finance Reports & Filings</td>
+          <th scope="row" class="entity-name">Finance Reports & Filings</th>
           <td>finance</td>
           <td>finance-eng</td>
           <td><span class="badge staging">staging</span></td>
@@ -284,7 +298,7 @@
           <td><span class="badge review">review</span></td>
         </tr>
         <tr>
-          <td class="entity-name">Engineering Documentation</td>
+          <th scope="row" class="entity-name">Engineering Documentation</th>
           <td>engineering</td>
           <td>devx</td>
           <td><span class="badge production">prod</span></td>
@@ -297,7 +311,7 @@
           <td><span class="badge review">review</span></td>
         </tr>
         <tr>
-          <td class="entity-name">Customer Support KB</td>
+          <th scope="row" class="entity-name">Customer Support KB</th>
           <td>support</td>
           <td>support-eng</td>
           <td><span class="badge production">prod</span></td>
@@ -310,7 +324,7 @@
           <td><span class="badge ready">production-ready</span></td>
         </tr>
         <tr>
-          <td class="entity-name">Sales Battlecards</td>
+          <th scope="row" class="entity-name">Sales Battlecards</th>
           <td>sales</td>
           <td>revops</td>
           <td><span class="badge production">prod</span></td>
@@ -323,7 +337,7 @@
           <td><span class="badge ready">production-ready</span></td>
         </tr>
         <tr>
-          <td class="entity-name">SecOps Runbooks</td>
+          <th scope="row" class="entity-name">SecOps Runbooks</th>
           <td>security</td>
           <td>secops</td>
           <td><span class="badge production">prod</span></td>
@@ -433,6 +447,8 @@
     </div>
   </div>
 </section>
+
+</main>
 
 <footer>
   rag-sentinel · part of the AI Platform Engineering portfolio ·

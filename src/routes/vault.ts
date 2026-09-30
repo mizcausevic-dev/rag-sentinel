@@ -16,14 +16,16 @@ import { realVaultFromEnv } from '../vault/real-vault';
 import { parseDecisionCard, selectVaultTarget } from '../vault/decision-card';
 import { vaultChunk } from '../governance/vault-chunk';
 import type { SkyyflowVault } from '../vault/types';
+import { env } from '../config/env';
 
 const VENDOR = 'skyyflow';
+const mockVault = new MockSkyyflowVault();
 
 // Pick the real vault if env wired; otherwise the deterministic mock.
 function buildVault(): { vault: SkyyflowVault; mode: 'real' | 'mock' } {
   const real = realVaultFromEnv();
   if (real) return { vault: real, mode: 'real' };
-  return { vault: new MockSkyyflowVault(), mode: 'mock' };
+  return { vault: mockVault, mode: 'mock' };
 }
 
 export const vaultRouter = Router();
@@ -63,6 +65,14 @@ vaultRouter.post('/preview', async (req, res) => {
     }
 
     const { vault, mode } = buildVault();
+    if (mode === 'mock' && env.nodeEnv === 'production') {
+      res.status(503).json({ error: 'Vault preview requires a configured real vault in production.' });
+      return;
+    }
+    if (mode === 'real' && target.vaultId !== vault.vaultId) {
+      res.status(422).json({ error: 'Decision Card vault_id does not match the configured vault.' });
+      return;
+    }
     const results = [];
     for (const c of chunks) {
       if (!c || typeof c.chunkId !== 'string' || typeof c.text !== 'string') {
@@ -111,6 +121,10 @@ vaultRouter.post('/detokenize-preview', async (req, res) => {
     }
 
     const { vault, mode } = buildVault();
+    if (mode === 'real' || env.nodeEnv === 'production') {
+      res.status(403).json({ error: 'Detokenization preview is limited to the local mock vault. Verified caller identity and role enforcement are required for real vault reveal.' });
+      return;
+    }
     const items = await vault.detokenize(tokens, {
       callerRoles,
       revealRoles: target.revealRoles,
