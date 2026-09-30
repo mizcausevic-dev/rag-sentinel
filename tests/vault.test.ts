@@ -119,6 +119,7 @@ test('vaultChunk: replaces email and SSN PII with tokens, leaves text otherwise 
     target,
     vault
   );
+  assert.ok(r.vaultedText !== null);
   assert.ok(!r.vaultedText.includes('jane@example.com'));
   assert.ok(!r.vaultedText.includes('123-45-6789'));
   assert.ok(r.vaultedText.startsWith('Parent contact: skyy_'));
@@ -141,7 +142,20 @@ test('vaultChunk: leaves credentials (api keys) unauthorized + still blocks', as
   // No PII fields authorized for api-key-prefix — chunk still blocks.
   assert.equal(r.substitutions.length, 0);
   assert.equal(r.shouldBlock, true);
+  assert.equal(r.vaultedText, null);
   assert.ok(r.unauthorizedHits.some((h) => h.patternName === 'api-key-prefix'));
+});
+
+test('vaultChunk: denies an unapproved low-severity field without returning indexable text', async () => {
+  const vault = new MockSkyyflowVault();
+  const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
+  const emailOnly = { ...target, fieldsAuthorized: ['email'] };
+  const result = await vaultChunk('c-low', 'Contact jane@example.com or (202) 555-0100.', emailOnly, vault);
+  assert.equal(result.shouldBlock, true);
+  assert.equal(result.vaultedText, null);
+  assert.equal(result.substitutions.length, 0);
+  assert.equal(vault.size(), 0);
+  assert.ok(result.unauthorizedHits.some((hit) => hit.patternName === 'us-phone'));
 });
 
 test('vaultChunk: clean text passes through with zero substitutions', async () => {
@@ -170,6 +184,7 @@ test('vaultChunk: tokenizes every distinct PII value before allowing indexing', 
   const vault = new MockSkyyflowVault();
   const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
   const r = await vaultChunk('multi-email', 'Contact jane@example.com and pat@example.com.', target, vault);
+  assert.ok(r.vaultedText !== null);
   assert.equal(r.substitutions.length, 2);
   assert.ok(!r.vaultedText.includes('jane@example.com'));
   assert.ok(!r.vaultedText.includes('pat@example.com'));

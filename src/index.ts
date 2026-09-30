@@ -1,7 +1,7 @@
 import express from 'express';
 import helmet from 'helmet';
-import { timingSafeEqual } from 'node:crypto';
-import { assertRuntimeConfig, env } from './config/env';
+import { assertRuntimeConfig, configuredPrincipals, env } from './config/env';
+import { findPrincipal } from './auth/principals';
 import { validateRouter } from './routes/validate';
 import { collectionsRouter, incidentsRouter, dashboardRouter } from './routes/index';
 import { vaultRouter } from './routes/vault';
@@ -31,17 +31,17 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api', (req, res, next) => {
-  if (env.apiKey.trim().length < 32) {
+  const principals = configuredPrincipals();
+  if (principals.length === 0) {
     res.status(503).json({ error: 'API authentication is not configured.' });
     return;
   }
-  const supplied = req.header('x-api-key') || '';
-  const expected = Buffer.from(env.apiKey);
-  const actual = Buffer.from(supplied);
-  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
+  const principal = findPrincipal(req.header('x-api-key') || '', principals);
+  if (!principal) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
+  res.locals.principal = principal;
   next();
 });
 

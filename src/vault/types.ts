@@ -1,20 +1,21 @@
 // Skyyflow vault interface — vendor-neutral token vault for PII fields detected
-// by the rag-sentinel PII scanner. Implementations: MockVault (default,
-// in-memory, deterministic — for tests, screenshots, demos), RealVault (HTTP
+// by the rag-sentinel PII scanner. Implementations: MockVault (opt-in,
+// in-memory, deterministic — for tests and local demos), RealVault (HTTP
 // adapter to a hosted Skyyflow vault, env-gated on SKYYFLOW_VAULT_URL).
 //
 // Both implementations satisfy the same Decision-Card-driven contract:
 // (a) tokenize() replaces raw PII values with opaque tokens before they leave
 //     the rag-sentinel process; tokens are what gets persisted in the vector
-//     store
-// (b) detokenize() reveals tokens back to raw values ONLY when the caller's
-//     roles intersect the reveal_roles list declared in the active Decision
-//     Card's data_vault_targets[]
+//     store. No vector-store persistence is implemented here.
+// (b) detokenize() compares server-authenticated principal roles with the
+//     reveal_roles list declared in the active Decision Card target. The HTTP
+//     boundary rejects real-vault reveal until identity and provider policy
+//     can be independently verified.
 
 export interface TokenizeRequest {
   /** Logical field name as it appears in the Decision Card fields_authorized list. */
   field: string;
-  /** Raw PII value. After this call, the rag-sentinel process should drop this from memory. */
+  /** Raw PII value. Callers must apply their own retention and secure-handling policy. */
   value: string;
 }
 

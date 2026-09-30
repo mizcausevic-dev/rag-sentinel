@@ -76,6 +76,13 @@ test('scanChunk: detects SSN pattern', () => {
   assert.equal(r.shouldBlock, true);
 });
 
+test('scanChunk: detects a parenthesized phone after whitespace and at chunk start', () => {
+  for (const text of ['Call (202) 555-0100.', '(202) 555-0100 is the contact.']) {
+    const result = scanChunk('phone', text);
+    assert.ok(result.hits.some((hit) => hit.patternName === 'us-phone'));
+  }
+});
+
 test('scanChunk: detects private key block', () => {
   const r = scanChunk('c3', 'Embedded credential: -----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...');
   assert.ok(r.hits.some((h) => h.patternName === 'private-key-block'));

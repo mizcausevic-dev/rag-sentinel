@@ -2,8 +2,8 @@
 // chunk and currently BLOCKS those chunks from being indexed. With a vault in
 // the loop, we tokenize matches instead — the chunk text gets rewritten with
 // opaque tokens in place of raw PII, and the rewritten chunk is what flows
-// into the vector store. The embedding stays semantically valid; the vendor
-// (or attacker who reads the vector store) never sees raw PII.
+// into a vector store only after operator review. Heuristic matching can miss
+// sensitive data, and this module does not persist or erase the original text.
 
 import { scanChunk, type PiiHit } from './pii-scanner';
 import type { ParsedVaultTarget } from '../vault/decision-card';
@@ -20,13 +20,13 @@ export interface VaultedSubstitution {
 
 export interface VaultChunkResult {
   chunkId: string;
-  /** Original text with PII matches replaced by their tokens. Safe to embed and persist. */
-  vaultedText: string;
-  /** Per-substitution audit trail. Persist alongside the chunk so detokenize can replay it. */
+  /** Candidate text after detected, authorized PII is tokenized; null when blocked. Requires review before indexing. */
+  vaultedText: string | null;
+  /** Per-substitution preview data. Persistence and audit controls are not implemented here. */
   substitutions: VaultedSubstitution[];
   /** PII patterns that fired but no field in the Decision Card matched — these still block. */
   unauthorizedHits: PiiHit[];
-  /** True when the chunk had unauthorized critical/high PII and should still NOT be indexed. */
+  /** True when any recognized sensitive value remains and the chunk must not be indexed. */
   shouldBlock: boolean;
 }
 
@@ -43,7 +43,7 @@ const PATTERN_TO_FIELD: Record<string, string> = {
 };
 
 function fieldsAuthorized(target: ParsedVaultTarget): Set<string> {
-  return new Set(target.fieldsAuthorized.map((f) => f.split('.').pop() ?? f));
+  return new Set(target.fieldsAuthorized);
 }
 
 export async function vaultChunk(
@@ -78,13 +78,20 @@ export async function vaultChunk(
     }
   }
 
+  // A rejected chunk has no indexable candidate. Avoid sending even its
+  // authorized matches to a real vault when another recognized field blocks it.
+  if (unauthorized.length > 0) {
+    return { chunkId, vaultedText: null, substitutions: [], unauthorizedHits: unauthorized, shouldBlock: true };
+  }
+
   if (tokenizable.length === 0) {
+    const shouldBlock = unauthorized.length > 0 || scan.shouldBlock;
     return {
       chunkId,
-      vaultedText: text,
+      vaultedText: shouldBlock ? null : text,
       substitutions: [],
       unauthorizedHits: unauthorized,
-      shouldBlock: unauthorized.length > 0 && scan.shouldBlock,
+      shouldBlock,
     };
   }
 
@@ -107,19 +114,14 @@ export async function vaultChunk(
     substitutions.push({ patternName: hit.patternName, token, field });
   }
 
-  // After tokenization, ANY remaining hits are unauthorized + still credentials/auth.
-  // If those are critical/high we still block; if only tokenizable PII existed, the
-  // chunk is now safe to index.
+  // Any recognized residual sensitive value blocks the candidate. A false
+  // value does not prove that unrecognized sensitive content is absent.
   const residual = scanChunk(chunkId, vaultedText);
-  const shouldBlock = unauthorized.some((h) => h.severity === 'critical' || h.severity === 'high') ||
-    residual.shouldBlock || residual.hits.some((h) => {
-      const field = PATTERN_TO_FIELD[h.patternName];
-      return field !== undefined && allowed.has(field);
-    });
+  const shouldBlock = unauthorized.length > 0 || residual.hits.length > 0;
 
   return {
     chunkId,
-    vaultedText,
+    vaultedText: shouldBlock ? null : vaultedText,
     substitutions,
     unauthorizedHits: unauthorized,
     shouldBlock,
@@ -137,7 +139,7 @@ function extractRawMatches(patternName: string, text: string): string[] {
 
 const RAW_PATTERNS: Record<string, RegExp> = {
   email: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g,
-  'us-phone': /\b\(\d{3}\)\s*\d{3}-\d{4}\b/g,
+  'us-phone': /(?<!\w)\(\d{3}\)\s*\d{3}-\d{4}\b/g,
   'ssn-us': /\b\d{3}-\d{2}-\d{4}\b/g,
   'credit-card': /\b(?:\d{4}[- ]?){3}\d{4}\b/g,
   iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{12,28}\b/g,

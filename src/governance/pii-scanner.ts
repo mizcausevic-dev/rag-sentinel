@@ -19,7 +19,7 @@ const PATTERNS: PiiPattern[] = [
   { name: 'ssn-us', severity: 'high', regex: /\b\d{3}-\d{2}-\d{4}\b/, description: 'SSN-like pattern detected.' },
   { name: 'credit-card', severity: 'high', regex: /\b(?:\d{4}[- ]?){3}\d{4}\b/, description: 'Credit card number pattern detected.' },
   { name: 'iban', severity: 'high', regex: /\b[A-Z]{2}\d{2}[A-Z0-9]{12,28}\b/, description: 'IBAN pattern detected.' },
-  { name: 'us-phone', severity: 'low', regex: /\b\(\d{3}\)\s*\d{3}-\d{4}\b/, description: 'US phone number pattern detected.' },
+  { name: 'us-phone', severity: 'low', regex: /(?<!\w)\(\d{3}\)\s*\d{3}-\d{4}\b/, description: 'US phone number pattern detected.' },
   { name: 'email', severity: 'low', regex: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/, description: 'Email address detected.' },
 ];
 
