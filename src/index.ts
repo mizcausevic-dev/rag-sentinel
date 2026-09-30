@@ -1,5 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { assertRuntimeConfig, configuredPrincipals, env } from './config/env';
 import { findPrincipal } from './auth/principals';
 import { validateRouter } from './routes/validate';
@@ -12,6 +13,7 @@ app.disable('x-powered-by');
 const startedAt = Date.now();
 
 app.use(helmet());
+app.set('trust proxy', false);
 app.use((req, res, next) => {
   const started = Date.now();
   res.on('finish', () => {
@@ -29,6 +31,15 @@ app.get('/health', (_req, res) => {
     nodeEnv: env.nodeEnv,
   });
 });
+
+// Count attempts before key lookup or JSON parsing; ignore untrusted proxy headers.
+app.use('/api', rateLimit({
+  windowMs: 60_000,
+  limit: 40,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'API request rate limit exceeded.' },
+}));
 
 app.use('/api', (req, res, next) => {
   const principals = configuredPrincipals();

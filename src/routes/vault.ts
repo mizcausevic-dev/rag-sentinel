@@ -10,6 +10,7 @@
 //                                to the authenticated server-side principal
 
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { MockSkyyflowVault } from '../vault/mock-vault';
 import { realVaultFromEnv } from '../vault/real-vault';
 import { decisionIsActive, parseDecisionCard, selectVaultTarget } from '../vault/decision-card';
@@ -19,6 +20,10 @@ import { env } from '../config/env';
 import { authorizesVaultTarget, type ApiPrincipal } from '../auth/principals';
 
 const VENDOR = 'skyyflow';
+const MAX_CHUNKS = 50;
+const MAX_CHUNK_TEXT_BYTES = 64 * 1024;
+const MAX_TOKEN_ITEMS = 100;
+const MAX_TOKEN_LENGTH = 512;
 const mockVaults = new Map<string, MockSkyyflowVault>();
 
 function mockVaultFor(principal: ApiPrincipal): MockSkyyflowVault {
@@ -40,8 +45,15 @@ function buildVault(principal: ApiPrincipal): { vault: SkyyflowVault; mode: 'rea
 }
 
 export const vaultRouter = Router();
+const vaultLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 12,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Vault request rate limit exceeded.' },
+});
 
-vaultRouter.get('/status', (_req, res) => {
+vaultRouter.get('/status', vaultLimiter, (_req, res) => {
   const principal = res.locals.principal as ApiPrincipal;
   const { mode, vault } = buildVault(principal);
   if (vault && !principal.vaultIds.includes(vault.vaultId)) {
@@ -58,7 +70,7 @@ vaultRouter.get('/status', (_req, res) => {
   });
 });
 
-vaultRouter.post('/preview', async (req, res) => {
+vaultRouter.post('/preview', vaultLimiter, async (req, res) => {
   try {
     const principal = res.locals.principal as ApiPrincipal;
     const { decisionCard, chunks } = req.body ?? {};
@@ -68,6 +80,13 @@ vaultRouter.post('/preview', async (req, res) => {
     }
     if (!Array.isArray(chunks) || chunks.length === 0) {
       res.status(400).json({ error: 'Request body must include chunks: [{ chunkId, text }] with at least one entry.' });
+      return;
+    }
+    if (chunks.length > MAX_CHUNKS || chunks.some((chunk) =>
+      !chunk || typeof chunk.chunkId !== 'string' || chunk.chunkId.length === 0 || chunk.chunkId.length > 128 ||
+      typeof chunk.text !== 'string' || chunk.text.length === 0 || Buffer.byteLength(chunk.text, 'utf8') > MAX_CHUNK_TEXT_BYTES
+    )) {
+      res.status(400).json({ error: 'Provide at most 50 chunks, each with a 1-128 character chunkId and 1-65536 UTF-8 byte text.' });
       return;
     }
     const parsed = parseDecisionCard(decisionCard);
@@ -104,11 +123,12 @@ vaultRouter.post('/preview', async (req, res) => {
     }
     const results = [];
     for (const c of chunks) {
-      if (!c || typeof c.chunkId !== 'string' || typeof c.text !== 'string') {
-        res.status(400).json({ error: 'Each chunk must be { chunkId: string, text: string }.' });
+      try {
+        results.push(await vaultChunk(c.chunkId, c.text, target, vault));
+      } catch {
+        res.status(502).json({ error: 'Vault preview failed.' });
         return;
       }
-      results.push(await vaultChunk(c.chunkId, c.text, target, vault));
     }
 
     res.json({
@@ -127,7 +147,7 @@ vaultRouter.post('/preview', async (req, res) => {
   }
 });
 
-vaultRouter.post('/detokenize-preview', async (req, res) => {
+vaultRouter.post('/detokenize-preview', vaultLimiter, async (req, res) => {
   try {
     const principal = res.locals.principal as ApiPrincipal;
     const { decisionCard, tokens } = req.body ?? {};
@@ -143,6 +163,13 @@ vaultRouter.post('/detokenize-preview', async (req, res) => {
       res.status(400).json({ error: 'Request body must include tokens: [{ field, token }] with at least one entry.' });
       return;
     }
+    if (tokens.length > MAX_TOKEN_ITEMS || tokens.some((item) =>
+      !item || typeof item.field !== 'string' || typeof item.token !== 'string' ||
+      item.token.length === 0 || item.token.length > MAX_TOKEN_LENGTH
+    )) {
+      res.status(400).json({ error: 'Provide at most 100 tokens, each with a string field and a 1-512 character token.' });
+      return;
+    }
     const parsed = parseDecisionCard(decisionCard);
     const target = selectVaultTarget(parsed, VENDOR);
     if (!target) {
@@ -155,6 +182,10 @@ vaultRouter.post('/detokenize-preview', async (req, res) => {
     }
     if (!authorizesVaultTarget(principal, target)) {
       res.status(403).json({ error: 'The authenticated principal is not authorized for this vault and field set.' });
+      return;
+    }
+    if (tokens.some((item) => !target.fieldsAuthorized.includes(item.field) || !principal.fieldsAuthorized.includes(item.field))) {
+      res.status(403).json({ error: 'The authenticated principal is not authorized for every requested token field.' });
       return;
     }
 

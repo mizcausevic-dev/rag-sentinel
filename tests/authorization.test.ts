@@ -6,9 +6,9 @@ import { env } from '../src/config/env';
 import { authorizesVaultTarget, findPrincipal, parsePrincipals } from '../src/auth/principals';
 import { decisionIsActive, parseDecisionCard, selectVaultTarget } from '../src/vault/decision-card';
 
-const keyA = 'a'.repeat(32);
-const keyB = 'b'.repeat(32);
-const keyC = 'c'.repeat(32);
+const keyA = Buffer.alloc(32, 0x11).toString('hex');
+const keyB = Buffer.alloc(32, 0x22).toString('hex');
+const keyC = Buffer.alloc(32, 0x33).toString('hex');
 const config = [
   { id: 'alice', tenantId: 'tenant-a', apiKey: keyA, roles: ['vault-tokenize', 'reviewer'], vaultIds: ['vault-a'], fieldsAuthorized: ['email'] },
   { id: 'bob', tenantId: 'tenant-b', apiKey: keyB, roles: ['vault-tokenize'], vaultIds: ['vault-b'], fieldsAuthorized: ['email'] },
@@ -28,7 +28,8 @@ test('principal keys bind server-side tenant, vault, role, and field policy', ()
 });
 
 test('principal config refuses duplicate keys and cross-tenant vault ownership', () => {
-  assert.throws(() => parsePrincipals(JSON.stringify([{ ...config[0], apiKey: 'short' }])), /too_small|at least 32/i);
+  assert.throws(() => parsePrincipals(JSON.stringify([{ ...config[0], apiKey: 'short' }])), /64 lowercase hex/i);
+  assert.throws(() => parsePrincipals(JSON.stringify([{ ...config[0], apiKey: 'z'.repeat(64) }])), /64 lowercase hex/i);
   assert.throws(() => parsePrincipals(JSON.stringify([config[0], { ...config[1], apiKey: keyA }])), /API keys must be unique/);
   assert.throws(() => parsePrincipals(JSON.stringify([config[0], { ...config[1], vaultIds: ['vault-a'] }])), /cannot belong to two tenants/);
 });
@@ -94,6 +95,60 @@ test('vault status does not disclose another tenant\'s configured vault ID', asy
     assert.equal(allowed.body.vaultId, 'vault-a');
   } finally {
     env.principals = previousPrincipals;
+    for (const [name, value] of Object.entries({
+      SKYYFLOW_VAULT_URL: previousVault.url,
+      SKYYFLOW_ACCESS_TOKEN: previousVault.token,
+      SKYYFLOW_VAULT_ID: previousVault.id,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+});
+
+test('vault preview rejects every malformed or oversized chunk before calling the provider', async () => {
+  const previousPrincipals = env.principals;
+  const previousLocalDemo = env.localDemo;
+  const previousKey = env.apiKey;
+  const previousFetch = globalThis.fetch;
+  const previousVault = {
+    url: process.env.SKYYFLOW_VAULT_URL,
+    token: process.env.SKYYFLOW_ACCESS_TOKEN,
+    id: process.env.SKYYFLOW_VAULT_ID,
+  };
+  let providerCalls = 0;
+  globalThis.fetch = (async () => { providerCalls++; throw new Error('unexpected provider call'); }) as typeof fetch;
+  env.principals = parsePrincipals(JSON.stringify(config));
+  env.localDemo = false;
+  env.apiKey = '';
+  process.env.SKYYFLOW_VAULT_URL = 'https://vault.example.org/v1';
+  process.env.SKYYFLOW_ACCESS_TOKEN = 'synthetic-test-token';
+  process.env.SKYYFLOW_VAULT_ID = 'vault-a';
+  try {
+    const decisionCard = {
+      decision_card_version: '0.3', decision_id: 'DEC-1', decision: { status: 'approved' },
+      data_vault_targets: [{ vendor: 'skyyflow', vault_id: 'vault-a', fields_authorized: ['email'] }],
+    };
+    const valid = { chunkId: 'c1', text: 'synthetic@example.org' };
+    for (const chunks of [
+      [valid, { chunkId: 'c2', text: 42 }],
+      Array.from({ length: 51 }, (_, index) => ({ chunkId: `c${index}`, text: 'synthetic text' })),
+      [{ chunkId: 'large', text: 'x'.repeat(65_537) }],
+    ]) {
+      const response = await request(app).post('/api/vault/preview').set('x-api-key', keyA).send({ decisionCard, chunks });
+      assert.equal(response.status, 400);
+      assert.equal(providerCalls, 0);
+    }
+    const providerFailure = await request(app).post('/api/vault/preview').set('x-api-key', keyA).send({ decisionCard, chunks: [valid] });
+    assert.equal(providerFailure.status, 502);
+    assert.equal(providerFailure.body.error, 'Vault preview failed.');
+    assert.equal(providerCalls, 1);
+    assert.equal(JSON.stringify(providerFailure.body).includes('unexpected provider call'), false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    env.principals = previousPrincipals;
+    env.localDemo = previousLocalDemo;
+    env.apiKey = previousKey;
     for (const [name, value] of Object.entries({
       SKYYFLOW_VAULT_URL: previousVault.url,
       SKYYFLOW_ACCESS_TOKEN: previousVault.token,

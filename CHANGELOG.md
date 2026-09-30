@@ -4,7 +4,9 @@ This file records source changes. The version in `package.json` does not establi
 
 ## Unreleased review changes
 
-- Bind the service to loopback by default. Serving HTTP in any environment now requires a shared `RAG_SENTINEL_API_KEY` of at least 32 characters; `/api/*` requests require its `x-api-key` header.
+- Require generated 32-byte hex API keys, compare keyed in-memory fingerprints, and rate-limit pre-auth API attempts plus vault requests per socket IP. The in-memory limits require an edge or distributed counterpart before multi-instance deployment.
+- Prevalidate and bound the entire vault preview batch and mock reveal token list before processing, reject unauthorized token fields, and withhold provider error details from clients.
+- Bind the service to loopback by default. The explicit local demo requires a 64-character hex `RAG_SENTINEL_API_KEY` generated from 32 random bytes; `/api/*` requests require its `x-api-key` header.
 - Remove permissive CORS and query-string logging. Mark the package private and remove unused HTTP dependencies.
 - Tokenize all distinct detected PII values in a chunk and fail closed on residual recognized sensitive content. Reject malformed vault responses and partial real-vault configuration.
 - Limit detokenization preview to the local mock vault. Real-vault HTTP reveal now returns 403 until verified caller identity and role controls exist. Production mock preview now returns 503.

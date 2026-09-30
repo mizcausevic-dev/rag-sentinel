@@ -7,7 +7,7 @@ import { RealSkyyflowVault, realVaultFromEnv } from '../src/vault/real-vault';
 import { parsePrincipals } from '../src/auth/principals';
 import { assertRuntimeConfig } from '../src/config/env';
 
-const testApiKey = 'a'.repeat(32);
+const testApiKey = Buffer.alloc(32, 0x44).toString('hex'); // Synthetic test-only token.
 env.apiKey = testApiKey;
 env.localDemo = true;
 
@@ -25,7 +25,7 @@ const decisionCard = {
 
 test('API key gates API routes, while health remains public', async () => {
   const previous = env.apiKey;
-  env.apiKey = 'a'.repeat(32);
+  env.apiKey = testApiKey;
   try {
     assert.equal((await request(app).get('/health')).status, 200);
     assert.equal((await request(app).get('/api/collections')).status, 401);
@@ -113,6 +113,10 @@ test('mock preview round-trip works locally and denies an unlisted role', async 
   const tokens = preview.body.chunks[0].substitutions.map(({ field, token }: { field: string; token: string }) => ({ field, token }));
   const denied = await request(app).post('/api/vault/detokenize-preview').set('x-api-key', testApiKey).send({ decisionCard, tokens, callerRoles: ['demo-operator'] });
   assert.equal(denied.status, 400);
+  const wrongField = await request(app).post('/api/vault/detokenize-preview').set('x-api-key', testApiKey).send({ decisionCard, tokens: [{ field: 'ssn', token: tokens[0].token }] });
+  assert.equal(wrongField.status, 403);
+  const tooMany = await request(app).post('/api/vault/detokenize-preview').set('x-api-key', testApiKey).send({ decisionCard, tokens: Array.from({ length: 101 }, () => tokens[0]) });
+  assert.equal(tooMany.status, 400);
   const revealed = await request(app).post('/api/vault/detokenize-preview').set('x-api-key', testApiKey).send({ decisionCard, tokens });
   assert.deepEqual(revealed.body.items.map(({ value }: { value: string }) => value).sort(), ['jane@example.com', 'pat@example.com']);
 });
@@ -193,4 +197,34 @@ test('real vault requests have a timeout and refuse redirects', async () => {
   await vault.detokenize([{ field: 'email', token: 'skyy_demo' }], { callerRoles: ['principal'], revealRoles: ['principal'] });
   assert.equal(seen.length, 2);
   assert.ok(seen.every((init) => init.redirect === 'error' && init.signal));
+});
+
+test('vault route returns 429 with retry guidance after its per-IP quota', async () => {
+  let limited: Awaited<ReturnType<ReturnType<typeof request>['get']>> | undefined;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const response = await request(app).get('/api/vault/status').set('x-api-key', testApiKey);
+    if (response.status === 429) {
+      limited = response;
+      break;
+    }
+  }
+  assert.ok(limited, 'expected the vault quota to reject a burst');
+  assert.equal(limited.body.error, 'Vault request rate limit exceeded.');
+  assert.ok(limited.headers['retry-after']);
+});
+
+test('unauthenticated API attempts are limited before key lookup and ignore spoofed proxy IPs', async () => {
+  let limited: Awaited<ReturnType<ReturnType<typeof request>['get']>> | undefined;
+  for (let attempt = 0; attempt < 41; attempt++) {
+    const response = await request(app).get('/api/collections')
+      .set('x-api-key', 'wrong')
+      .set('X-Forwarded-For', `198.51.100.${(attempt % 200) + 1}`);
+    if (response.status === 429) {
+      limited = response;
+      break;
+    }
+    assert.equal(response.status, 401);
+  }
+  assert.ok(limited, 'expected the pre-auth quota to reject a burst despite spoofed headers');
+  assert.equal(limited.body.error, 'API request rate limit exceeded.');
 });

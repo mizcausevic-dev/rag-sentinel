@@ -1,12 +1,16 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 const name = z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/);
 const vaultField = z.enum(['email', 'phone', 'ssn', 'credit_card', 'iban']);
+const keyFormat = /^[a-f0-9]{64}$/;
+// API keys are generated from 32 random bytes, not user-chosen passwords.
+// A per-process secret keeps in-memory fingerprints from being bare token hashes.
+const fingerprintSecret = randomBytes(32);
 const principalSchema = z.object({
   id: name,
   tenantId: name,
-  apiKey: z.string().min(32),
+  apiKey: z.string().regex(keyFormat, 'API key must be 64 lowercase hex characters generated from 32 random bytes.'),
   roles: z.array(name),
   vaultIds: z.array(z.string().min(1)),
   fieldsAuthorized: z.array(vaultField),
@@ -21,8 +25,12 @@ export interface ApiPrincipal {
   fieldsAuthorized: readonly string[];
 }
 
-function hashKey(key: string): Buffer {
-  return createHash('sha256').update(key, 'utf8').digest();
+export function isApiKeyFormat(key: string): boolean {
+  return keyFormat.test(key);
+}
+
+function fingerprintKey(key: string): Buffer {
+  return createHmac('sha256', fingerprintSecret).update(key, 'utf8').digest();
 }
 
 export function parsePrincipals(raw: string | undefined): ApiPrincipal[] {
@@ -40,7 +48,7 @@ export function parsePrincipals(raw: string | undefined): ApiPrincipal[] {
   return config.map((entry) => {
     if (ids.has(entry.id)) throw new Error('Principal IDs must be unique.');
     ids.add(entry.id);
-    const keyHash = hashKey(entry.apiKey);
+    const keyHash = fingerprintKey(entry.apiKey);
     const keyId = keyHash.toString('hex');
     if (keys.has(keyId)) throw new Error('Principal API keys must be unique.');
     keys.add(keyId);
@@ -64,7 +72,7 @@ export function demoPrincipal(apiKey: string): ApiPrincipal {
   return {
     id: 'local-demo',
     tenantId: 'local-demo',
-    keyHash: hashKey(apiKey),
+    keyHash: fingerprintKey(apiKey),
     roles: ['vault-tokenize', 'demo-operator'],
     vaultIds: ['mock-vault-001'],
     fieldsAuthorized: ['email', 'phone', 'ssn', 'credit_card', 'iban'],
@@ -72,8 +80,8 @@ export function demoPrincipal(apiKey: string): ApiPrincipal {
 }
 
 export function findPrincipal(apiKey: string, principals: readonly ApiPrincipal[]): ApiPrincipal | null {
-  if (!apiKey) return null;
-  const candidate = hashKey(apiKey);
+  if (!isApiKeyFormat(apiKey)) return null;
+  const candidate = fingerprintKey(apiKey);
   let matched: ApiPrincipal | null = null;
   for (const principal of principals) {
     if (timingSafeEqual(candidate, principal.keyHash)) matched = principal;

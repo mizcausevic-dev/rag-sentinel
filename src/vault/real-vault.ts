@@ -1,5 +1,5 @@
 // HTTP adapter for a real Skyyflow vault. Selected when SKYYFLOW_VAULT_URL is
-// set in the environment; otherwise rag-sentinel falls back to MockSkyyflowVault.
+// set in the environment. Only explicit local demo mode uses MockSkyyflowVault.
 //
 // The shape below targets the Skyyflow-style tokenize/detokenize REST API —
 // bearer-auth, JSON in/out, /v1/tokenize and /v1/detokenize endpoints. The
