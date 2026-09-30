@@ -4,7 +4,7 @@ This file records source changes. The version in `package.json` does not establi
 
 ## Unreleased review changes
 
-- Require generated 32-byte hex API keys, compare keyed in-memory fingerprints, and rate-limit pre-auth API attempts plus vault requests per socket IP. The in-memory limits require an edge or distributed counterpart before multi-instance deployment.
+- Require generated 32-byte hex API keys, compare decoded tokens in constant time outside serializable principal records, and rate-limit pre-auth API attempts plus vault requests per socket IP. The in-memory limits require an edge or distributed counterpart before multi-instance deployment.
 - Prevalidate and bound the entire vault preview batch and mock reveal token list before processing, reject unauthorized token fields, and withhold provider error details from clients.
 - Bind the service to loopback by default. The explicit local demo requires a 64-character hex `RAG_SENTINEL_API_KEY` generated from 32 random bytes; `/api/*` requests require its `x-api-key` header.
 - Remove permissive CORS and query-string logging. Mark the package private and remove unused HTTP dependencies.

@@ -25,6 +25,7 @@ test('principal keys bind server-side tenant, vault, role, and field policy', ()
   assert.equal(authorizesVaultTarget(principals[0]!, { vaultId: 'vault-a', fieldsAuthorized: ['student.email'] }), false);
   assert.throws(() => parsePrincipals(JSON.stringify([{ ...config[0], fieldsAuthorized: ['student.email'] }])), /Invalid option|invalid_enum_value/i);
   assert.equal(JSON.stringify(principals).includes(keyA), false);
+  assert.equal(Object.keys(principals[0]!).some((key) => /key|secret|token/i.test(key)), false);
 });
 
 test('principal config refuses duplicate keys and cross-tenant vault ownership', () => {
