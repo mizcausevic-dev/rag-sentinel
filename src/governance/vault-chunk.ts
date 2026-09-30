@@ -2,8 +2,8 @@
 // chunk and currently BLOCKS those chunks from being indexed. With a vault in
 // the loop, we tokenize matches instead — the chunk text gets rewritten with
 // opaque tokens in place of raw PII, and the rewritten chunk is what flows
-// into the vector store. The embedding stays semantically valid; the vendor
-// (or attacker who reads the vector store) never sees raw PII.
+// into a vector store only after operator review. Heuristic matching can miss
+// sensitive data, and this module does not persist or erase the original text.
 
 import { scanChunk, type PiiHit } from './pii-scanner';
 import type { ParsedVaultTarget } from '../vault/decision-card';
@@ -20,13 +20,13 @@ export interface VaultedSubstitution {
 
 export interface VaultChunkResult {
   chunkId: string;
-  /** Original text with PII matches replaced by their tokens. Safe to embed and persist. */
-  vaultedText: string;
-  /** Per-substitution audit trail. Persist alongside the chunk so detokenize can replay it. */
+  /** Candidate text after detected, authorized PII is tokenized; null when blocked. Requires review before indexing. */
+  vaultedText: string | null;
+  /** Per-substitution preview data. Persistence and audit controls are not implemented here. */
   substitutions: VaultedSubstitution[];
   /** PII patterns that fired but no field in the Decision Card matched — these still block. */
   unauthorizedHits: PiiHit[];
-  /** True when the chunk had unauthorized critical/high PII and should still NOT be indexed. */
+  /** True when any recognized sensitive value remains and the chunk must not be indexed. */
   shouldBlock: boolean;
 }
 
@@ -43,7 +43,7 @@ const PATTERN_TO_FIELD: Record<string, string> = {
 };
 
 function fieldsAuthorized(target: ParsedVaultTarget): Set<string> {
-  return new Set(target.fieldsAuthorized.map((f) => f.split('.').pop() ?? f));
+  return new Set(target.fieldsAuthorized);
 }
 
 export async function vaultChunk(
@@ -70,45 +70,58 @@ export async function vaultChunk(
     // The scanner's regexes are case-insensitive in some cases; we re-run the
     // SAME pattern from the scanner's PATTERNS list. To keep this module
     // self-contained without re-importing PATTERNS, we use a per-pattern map.
-    const raw = extractRawMatch(hit.patternName, text);
-    if (raw) {
-      tokenizable.push({ hit, field, raw });
+    const matches = extractRawMatches(hit.patternName, text);
+    if (matches.length > 0) {
+      for (const raw of new Set(matches)) tokenizable.push({ hit, field, raw });
     } else {
       unauthorized.push(hit);
     }
   }
 
+  // A rejected chunk has no indexable candidate. Avoid sending even its
+  // authorized matches to a real vault when another recognized field blocks it.
+  if (unauthorized.length > 0) {
+    return { chunkId, vaultedText: null, substitutions: [], unauthorizedHits: unauthorized, shouldBlock: true };
+  }
+
   if (tokenizable.length === 0) {
+    const shouldBlock = unauthorized.length > 0 || scan.shouldBlock;
     return {
       chunkId,
-      vaultedText: text,
+      vaultedText: shouldBlock ? null : text,
       substitutions: [],
       unauthorizedHits: unauthorized,
-      shouldBlock: unauthorized.length > 0 && scan.shouldBlock,
+      shouldBlock,
     };
   }
 
   const tokens = await vault.tokenize(
     tokenizable.map(({ field, raw }) => ({ field, value: raw }))
   );
+  if (tokens.length !== tokenizable.length) {
+    throw new Error('Vault returned a different number of tokens than requested.');
+  }
 
   let vaultedText = text;
   const substitutions: VaultedSubstitution[] = [];
   for (let i = 0; i < tokenizable.length; i++) {
     const { hit, raw } = tokenizable[i];
     const { token, field } = tokens[i];
+    if (field !== tokenizable[i].field || typeof token !== 'string' || token.length === 0) {
+      throw new Error('Vault returned an invalid token response.');
+    }
     vaultedText = vaultedText.split(raw).join(token);
     substitutions.push({ patternName: hit.patternName, token, field });
   }
 
-  // After tokenization, ANY remaining hits are unauthorized + still credentials/auth.
-  // If those are critical/high we still block; if only tokenizable PII existed, the
-  // chunk is now safe to index.
-  const shouldBlock = unauthorized.some((h) => h.severity === 'critical' || h.severity === 'high');
+  // Any recognized residual sensitive value blocks the candidate. A false
+  // value does not prove that unrecognized sensitive content is absent.
+  const residual = scanChunk(chunkId, vaultedText);
+  const shouldBlock = unauthorized.length > 0 || residual.hits.length > 0;
 
   return {
     chunkId,
-    vaultedText,
+    vaultedText: shouldBlock ? null : vaultedText,
     substitutions,
     unauthorizedHits: unauthorized,
     shouldBlock,
@@ -118,17 +131,16 @@ export async function vaultChunk(
 // Per-pattern raw extractor — same regexes as the scanner but without the
 // redaction step. We keep this in vault-chunk so the scanner's redact-on-hit
 // contract isn't broken.
-function extractRawMatch(patternName: string, text: string): string | null {
+function extractRawMatches(patternName: string, text: string): string[] {
   const re = RAW_PATTERNS[patternName];
-  if (!re) return null;
-  const m = text.match(re);
-  return m ? m[0] : null;
+  if (!re) return [];
+  return [...text.matchAll(re)].map((m) => m[0]);
 }
 
 const RAW_PATTERNS: Record<string, RegExp> = {
-  email: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/,
-  'us-phone': /\b\(\d{3}\)\s*\d{3}-\d{4}\b/,
-  'ssn-us': /\b\d{3}-\d{2}-\d{4}\b/,
-  'credit-card': /\b(?:\d{4}[- ]?){3}\d{4}\b/,
-  iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{12,28}\b/,
+  email: /\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g,
+  'us-phone': /(?<!\w)\(\d{3}\)\s*\d{3}-\d{4}\b/g,
+  'ssn-us': /\b\d{3}-\d{2}-\d{4}\b/g,
+  'credit-card': /\b(?:\d{4}[- ]?){3}\d{4}\b/g,
+  iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{12,28}\b/g,
 };

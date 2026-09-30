@@ -1,5 +1,5 @@
 // HTTP adapter for a real Skyyflow vault. Selected when SKYYFLOW_VAULT_URL is
-// set in the environment; otherwise rag-sentinel falls back to MockSkyyflowVault.
+// set in the environment. Only explicit local demo mode uses MockSkyyflowVault.
 //
 // The shape below targets the Skyyflow-style tokenize/detokenize REST API —
 // bearer-auth, JSON in/out, /v1/tokenize and /v1/detokenize endpoints. The
@@ -34,7 +34,11 @@ export class RealSkyyflowVault implements SkyyflowVault {
   private readonly fetchImpl: typeof fetch;
 
   constructor(options: RealVaultOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/$/, '');
+    const parsedUrl = new URL(options.baseUrl);
+    if (parsedUrl.protocol !== 'https:' || parsedUrl.username || parsedUrl.password || parsedUrl.search || parsedUrl.hash) {
+      throw new Error('SKYYFLOW_VAULT_URL must be an HTTPS URL without credentials, query, or fragment.');
+    }
+    this.baseUrl = parsedUrl.toString().replace(/\/$/, '');
     this.accessToken = options.accessToken;
     this.vaultId = options.vaultId;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -48,6 +52,8 @@ export class RealSkyyflowVault implements SkyyflowVault {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ vaultId: this.vaultId, items: requests }),
+      signal: AbortSignal.timeout(10_000),
+      redirect: 'error',
     });
     if (!res.ok) {
       throw new Error(`Skyyflow tokenize failed: ${res.status} ${res.statusText}`);
@@ -85,6 +91,8 @@ export class RealSkyyflowVault implements SkyyflowVault {
         items: requests,
         callerRoles: options.callerRoles,
       }),
+      signal: AbortSignal.timeout(10_000),
+      redirect: 'error',
     });
     if (!res.ok) {
       throw new Error(`Skyyflow detokenize failed: ${res.status} ${res.statusText}`);
@@ -99,8 +107,12 @@ export function realVaultFromEnv(env: NodeJS.ProcessEnv = process.env): RealSkyy
   const baseUrl = env.SKYYFLOW_VAULT_URL;
   const accessToken = env.SKYYFLOW_ACCESS_TOKEN;
   const vaultId = env.SKYYFLOW_VAULT_ID;
-  if (!baseUrl || !accessToken || !vaultId) {
+  if (baseUrl || accessToken || vaultId) {
+    if (!baseUrl || !accessToken || !vaultId) {
+      throw new Error('Skyyflow configuration is incomplete; set SKYYFLOW_VAULT_URL, SKYYFLOW_ACCESS_TOKEN, and SKYYFLOW_VAULT_ID together.');
+    }
+    return new RealSkyyflowVault({ baseUrl, accessToken, vaultId });
+  } else {
     return null;
   }
-  return new RealSkyyflowVault({ baseUrl, accessToken, vaultId });
 }

@@ -2,15 +2,17 @@
 
 [![Live demo: RAG Injection Scanner](docs/demo-preview.png)](https://ragscan.kineticgain.com)
 
-**Live demo:** [https://ragscan.kineticgain.com](https://ragscan.kineticgain.com) . Client-side, zero data egress.
+**Related live demo:** [RAG Injection Scanner](https://ragscan.kineticgain.com) is a separate browser tool. Its current data-flow behavior has not been verified as part of this repository's tests.
 
 
 [![CI](https://github.com/mizcausevic-dev/rag-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/mizcausevic-dev/rag-sentinel/actions/workflows/ci.yml)
-[![Node](https://img.shields.io/badge/node-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-22%20%7C%2024-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/typescript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-66FCF1)](LICENSE)
 
-Governance and observability layer for **enterprise RAG systems**: chunk quality scoring, source freshness audits, retrieval drift detection, hallucination signals, and PII leakage scanning across every indexed collection.
+A reference API for RAG governance checks: chunk quality scoring, source freshness audits, retrieval drift comparison, heuristic grounding signals, and sensitive-content scanning. It operates on caller-supplied data and bundled fixtures. No vector database connector, persistent collection history, production tenant isolation, or production identity system is included.
+
+**Release status:** Local evaluation prototype. The API must not be exposed as a multi-tenant or student-data service without verified authentication, provider contracts, retention controls, and operational testing.
 
 > **What this repo proves**
 >
@@ -18,16 +20,16 @@ Governance and observability layer for **enterprise RAG systems**: chunk quality
 
 ## Why This Exists
 
-Most enterprise AI failures aren't model failures â€” they're **retrieval failures**. Stale documentation that contradicts current product behavior. Chunks that start mid-sentence and degrade relevance. API keys accidentally indexed into the vector store. Top-K results silently shifting after an embedding model upgrade. None of this is visible until a customer sees something wrong in production.
+RAG failures can start in retrieval. Stale documentation can contradict current product behavior. Chunks can start mid-sentence and degrade relevance. API keys can be accidentally indexed into a vector store. Top-K results can shift after an embedding model upgrade. These risks motivate checks before customers rely on the answers.
 
-RAG Sentinel is the layer that watches all of it. It scores chunks at index time, audits sources for staleness, detects retrieval drift across snapshots, evaluates answer grounding, and scans indexed content for PII. Output is operator-friendly: per-collection posture scores, blocked-content lists, top issues by frequency, and a Monday-morning dashboard that fits on one screen.
+RAG Sentinel provides functions and HTTP endpoints that a team can call during indexing or answer evaluation. The bundled collections and dashboard are illustrative fixtures. The API does not watch a live vector store on its own.
 
 ## Where This Sits in the Portfolio
 
 | Repo | Surface | Question it answers |
 |---|---|---|
 | [`mcp-sentinel`](https://github.com/mizcausevic-dev/mcp-sentinel) | Tool calls | *What MCP tools are exposed and how risky are they?* |
-| **`rag-sentinel`** | **Retrieval** | ***What's in the vector store and how trustworthy is it?*** |
+| **rag-sentinel** | **Retrieval** | ***What do caller-supplied chunks and retrieval snapshots reveal?*** |
 | [`agent-codex`](https://github.com/mizcausevic-dev/agent-codex) | Decisions | *Under what policies are decisions allowed?* |
 | [`agentobserve`](https://github.com/mizcausevic-dev/agentobserve) | Runtime | *What did agents actually do â€” cost, latency, outcomes?* |
 | [`kinetic-flightdeck`](https://github.com/mizcausevic-dev/kinetic-flightdeck) | Operator | *Are we OK right now? Who do I call?* |
@@ -38,10 +40,10 @@ RAG Sentinel is the layer that watches all of it. It scores chunks at index time
 |---|---|
 | Runtime | Node.js + TypeScript |
 | Framework | Express 5 |
-| Domain | Enterprise RAG governance and observability |
+| Domain | RAG governance reference API and demo fixtures |
 | Validation Areas | Chunk quality Â· Source freshness Â· Retrieval drift Â· Hallucination signals Â· PII/sensitive content |
-| Operational Outputs | Per-chunk scores Â· Per-collection posture Â· Drift comparisons Â· Blocked-content lists Â· Open-incident view |
-| Docs | OpenAPI spec embedded; routes self-documented |
+| Operational Outputs | Per-chunk scores Â· fixture-based collection posture Â· drift comparisons Â· sensitive-content signals |
+| Docs | README and TypeScript route definitions; no generated OpenAPI contract |
 
 ## Five Governance Pillars
 
@@ -93,30 +95,32 @@ Catches leakage before it ends up in retrieval results:
 
 Severity-weighted blocking decision: `critical` and `high` hits trigger automatic block.
 
-### 5b. Tokenize-before-index (Skyyflow integration)
+### 5b. Tokenize-before-index preview (experimental Skyyflow-style adapter)
 
 The blocking model above answers *"is this content safe to index?"* The Skyyflow vault integration answers a different question: *"can this content be **made** safe to index by replacing the PII with tokens?"*
 
-When a buyer publishes an [AI Procurement Decision Card v0.2](https://github.com/mizcausevic-dev/ai-procurement-decision-spec) that lists `data_vault_targets[]` with `vendor: "skyyflow"`, rag-sentinel:
+When the caller supplies an [AI Procurement Decision Card v0.1-v0.3](https://github.com/mizcausevic-dev/ai-procurement-decision-spec) that lists `data_vault_targets[]` with `vendor: "skyyflow"`, the preview endpoint:
 
-1. **At index time** — replaces the matched PII values (email, phone, SSN, credit card, IBAN — never credentials or auth secrets) with opaque vault tokens. The chunk text is rewritten with tokens; the embedding stays semantically valid; the vector store never sees raw PII.
-2. **At query time** — calls `detokenize()` with the caller's roles. If any of the caller's roles is in the Decision Card's `reveal_roles[]`, tokens become raw values; otherwise the response carries tokens through and an audit event is emitted.
+1. Replaces detected, authorized PII values (email, phone, SSN, credit card, IBAN, never credentials or auth secrets) with tokens and returns a candidate chunk for an operator to review. If a recognized field is unauthorized, the request makes no vault call and returns `shouldBlock: true` with `vaultedText: null`. A recognized sensitive value remaining after tokenization also blocks the candidate. The caller remains responsible for deciding whether to index an unblocked candidate. Pattern matching is heuristic and does not prove all PII is removed.
+2. Supports a local mock-only detokenization preview. Caller-supplied `callerRoles` are rejected; demo roles come from the server-side principal. The HTTP endpoint refuses real-vault reveal. There is no audit-event pipeline or production query-time integration.
+
+The server binds each configured API principal to a tenant ID, vault ID allowlist, permitted fields, and roles. Vault preview requires the `vault-tokenize` role, a matching configured vault and field set, and a Decision Card that declares an unexpired `approved` status. Conditional approvals are denied because this preview cannot evaluate their conditions. This preview accepts only exact canonical field names (`email`, `phone`, `ssn`, `credit_card`, `iban`); nested field paths are denied because the scanner cannot bind each detected value to a specific path. The Decision Card is supplied by the caller and its origin or signature is **not** verified. It is an additional declaration check, not a source of authorization or proof of procurement approval. Only a separately trusted buyer record can establish that approval. The real adapter uses one globally configured vault, so this is not a verified multi-tenant service.
 
 Two vault implementations ship in the box:
 
 | Implementation | When it's selected | Notes |
 |---|---|---|
-| `MockSkyyflowVault` | Default — when env is not configured | In-memory + deterministic. Same input → same token across calls. For tests, screenshots, demos. |
-| `RealSkyyflowVault` | When `SKYYFLOW_VAULT_URL` + `SKYYFLOW_ACCESS_TOKEN` + `SKYYFLOW_VAULT_ID` are set | HTTP adapter to a hosted vault. Caller is responsible for token refresh. |
+| `MockSkyyflowVault` | Explicit loopback-only local demo | Deterministic in-memory tokens. Use synthetic input only. Predictable tokens are unsuitable for real PII. |
+| `RealSkyyflowVault` | When all three `SKYYFLOW_*` variables are set | Experimental HTTPS adapter for tokenization. The assumed provider API contract and token refresh have not been verified against a live Skyyflow tenant. Real-vault detokenization is disabled at the HTTP boundary. |
 
 Credentials and auth secrets (private keys, AWS access keys, JWT tokens, API keys) are **never tokenized** — they continue to block the chunk regardless of Decision Card target. That distinction is intentional: tokenizing a credential just makes it slightly harder to find while shipping it into a vector store anyway.
 
-Two HTTP endpoints expose the integration:
+Three HTTP endpoints expose the integration:
 
 ```
 GET  /api/vault/status                      mock vs real vault, vault id, env-toggle hint
 POST /api/vault/preview                     decisionCard + chunks → vaulted text + substitution audit
-POST /api/vault/detokenize-preview          decisionCard + tokens + callerRoles → reveal disposition
+POST /api/vault/detokenize-preview          local mock only; decisionCard + tokens → preview disposition
 ```
 
 Example — `POST /api/vault/preview`:
@@ -124,7 +128,7 @@ Example — `POST /api/vault/preview`:
 ```jsonc
 // Request
 {
-  "decisionCard": { /* a Decision Card v0.2 document */ },
+  "decisionCard": { /* a Decision Card v0.1-v0.3 with decision.status="approved" and a matching target */ },
   "chunks": [
     { "chunkId": "c1", "text": "Contact jane@example.com; SSN 123-45-6789 on file." }
   ]
@@ -133,12 +137,12 @@ Example — `POST /api/vault/preview`:
 // Response (mock vault, truncated tokens for readability)
 {
   "decisionId": "DEMO-1",
-  "decisionCardVersion": "0.2",
+  "decisionCardVersion": "0.3",
   "vaultVendor": "skyyflow",
   "vaultMode": "mock",
-  "vaultId": "v_demo",
+  "vaultId": "mock-vault-001",
   "fieldsAuthorized": ["email", "ssn"],
-  "revealRoles": ["principal"],
+  "revealRoles": ["demo-operator"],
   "chunks": [
     {
       "chunkId": "c1",
@@ -177,9 +181,9 @@ Override logic: a single critical signal (PII crisis, freshness crisis, hallucin
 | GET | `/api/collections/:id` | Single collection metadata + metrics |
 | GET | `/api/collections/:id/posture` | Composite posture score for collection |
 | GET | `/api/incidents` | Filtered incident feed (collectionId, severity, status, category) |
-| GET | `/api/vault/status` | Mock vs real Skyyflow vault, vault id, env-toggle hint |
-| POST | `/api/vault/preview` | Decision Card v0.2 + chunks → vaulted text + substitution audit |
-| POST | `/api/vault/detokenize-preview` | Decision Card v0.2 + tokens + callerRoles → reveal disposition |
+| GET | `/api/vault/status` | Configured vault mode and vault ID when authorized for that vault |
+| POST | `/api/vault/preview` | Active Decision Card v0.1-v0.3 + authorized chunks → vaulted text + substitution preview |
+| POST | `/api/vault/detokenize-preview` | Active Decision Card v0.1-v0.3 + tokens → local mock reveal disposition using server-side roles |
 | GET | `/api/dashboard/summary` | Operator headline view |
 
 ### Validate
@@ -262,27 +266,38 @@ POST /api/validate/pii-scan
 
 ![RAG Sentinel operator console â€” KPIs, collection posture, retrieval drift, freshness, and incident timeline](docs/hero.png)
 
+The image and [`dashboard-preview/index.html`](dashboard-preview/index.html) are static synthetic illustrations. Their collection counts, incidents, production labels, and dates are not live operational evidence.
+
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.20+ or 24.12+ (maintained LTS lines targeted by CI)
 - npm
 
 ### Setup
 
-```bash
+```powershell
 git clone https://github.com/mizcausevic-dev/rag-sentinel.git
 cd rag-sentinel
-npm install
+npm ci
+$env:RAG_SENTINEL_API_KEY = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
+$env:RAG_SENTINEL_LOCAL_DEMO = 'true'
 npm run dev
 ```
 
-Visit:
+From a shell with the same API key, check:
 
-- `http://localhost:3000/health`
-- `http://localhost:3000/api/dashboard/summary`
-- `http://localhost:3000/api/collections`
+```powershell
+curl.exe http://127.0.0.1:3000/health
+curl.exe -H "x-api-key: $env:RAG_SENTINEL_API_KEY" http://127.0.0.1:3000/api/dashboard/summary
+```
+
+The server binds to `127.0.0.1` by default. This explicit local demo requires a 64-character lowercase hex `RAG_SENTINEL_API_KEY` generated from 32 random bytes and cannot start in production or with real Skyyflow settings. A reverse proxy can expose loopback services, so keep this demo off public networks. Requests to `/api/*` require its `x-api-key` header; the health endpoint remains public. Browser CORS access is disabled. Do not send real learner data to the mock vault. This repository is marked private for npm and has no public npm installation path.
+
+For a non-demo service, provision `RAG_SENTINEL_PRINCIPALS_JSON` through a secret manager as a JSON array of records with `id`, `tenantId`, `apiKey` (64 lowercase hex characters generated from 32 random bytes), `roles`, `vaultIds`, and `fieldsAuthorized`. API keys are high-entropy machine tokens, not human passwords; the process compares decoded 32-byte tokens in constant time and keeps key bytes outside serializable principal records. The source environment still contains the configured keys, so protect it as secret material. The `vault-tokenize` role is required for preview. Each vault ID may belong to only one tenant; `SKYYFLOW_VAULT_ID` must match the authorized principal and Decision Card target. Do not combine principal mode with the local demo variables. The principal mapping controls the preview endpoint but does not isolate the bundled synthetic collections or establish an end-user identity system. Verify the real provider contract, tenant-specific vault policy, credential lifecycle, retention, audit logging, and deployment boundary before processing personal data.
+
+`/api/*` accepts at most 40 requests per minute per socket IP before authentication or JSON parsing. The vault routes share a tighter 12-request-per-minute per socket IP limit, including status. A vault preview accepts at most 50 chunks with no more than 65,536 UTF-8 bytes of text per chunk; the entire batch is validated before any vault call. Mock reveal accepts at most 100 tokens with no more than 512 characters per token, and each requested field must be authorized. Both rate limits use process-local memory. `X-Forwarded-For` is ignored because proxy trust is disabled; a deployment behind a reverse proxy must set a reviewed trusted-proxy policy and use shared edge or distributed rate limiting. These local limits do not establish production abuse protection across replicas or IPs.
 
 ### Run Tests
 
@@ -290,16 +305,16 @@ Visit:
 npm test
 ```
 
-35 unit tests covering chunk quality, freshness buckets, retrieval drift edge cases, hallucination heuristics, PII pattern coverage, and composite posture override logic.
+Local tests cover chunk quality, freshness, retrieval drift, grounding heuristics, PII patterns, vault tokenization, principal authorization, API key enforcement, and real-vault reveal denial. Coverage percentage has not been measured.
 
 ## What This Demonstrates
 
-- RAG governance translated into enforceable, testable backend rules
+- RAG governance checks exposed as testable functions and endpoints
 - Heuristic-but-defensible analysis of grounding without requiring LLM calls in the loop
 - Composite scoring that respects platform-engineering doctrine (sensitive content + hallucination dominate)
 - Override logic â€” a single critical signal blocks regardless of good composites
-- Pluggable validation endpoints designed to wire into indexing pipelines and answer pipelines
-- Strict-mode TypeScript with full test coverage; CI matrix on Node 20 + 22
+- Validation endpoints that can be integrated into indexing and answer pipelines
+- Strict-mode TypeScript; CI matrix on Node 22 + 24
 
 ## Future Enhancements
 
@@ -313,7 +328,7 @@ npm test
 ## Tech Stack
 
 - Node.js, TypeScript, Express, Zod
-- Helmet, CORS, Morgan
+- Helmet
 - Node test runner
 
 ## Portfolio Links

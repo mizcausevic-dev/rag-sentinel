@@ -100,6 +100,16 @@ test('MockSkyyflowVault: detokenizing an unknown token is denied without leaking
   assert.equal(d.value, null);
 });
 
+test('MockSkyyflowVault: token cannot be revealed as a different field', async () => {
+  const vault = new MockSkyyflowVault();
+  const [email] = await vault.tokenize([{ field: 'email', value: 'jane@example.com' }]);
+  const [result] = await vault.detokenize(
+    [{ field: 'ssn', token: email.token }],
+    { callerRoles: ['principal'], revealRoles: ['principal'] }
+  );
+  assert.equal(result.value, null);
+});
+
 test('vaultChunk: replaces email and SSN PII with tokens, leaves text otherwise intact', async () => {
   const vault = new MockSkyyflowVault();
   const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
@@ -109,6 +119,7 @@ test('vaultChunk: replaces email and SSN PII with tokens, leaves text otherwise 
     target,
     vault
   );
+  assert.ok(r.vaultedText !== null);
   assert.ok(!r.vaultedText.includes('jane@example.com'));
   assert.ok(!r.vaultedText.includes('123-45-6789'));
   assert.ok(r.vaultedText.startsWith('Parent contact: skyy_'));
@@ -131,7 +142,20 @@ test('vaultChunk: leaves credentials (api keys) unauthorized + still blocks', as
   // No PII fields authorized for api-key-prefix — chunk still blocks.
   assert.equal(r.substitutions.length, 0);
   assert.equal(r.shouldBlock, true);
+  assert.equal(r.vaultedText, null);
   assert.ok(r.unauthorizedHits.some((h) => h.patternName === 'api-key-prefix'));
+});
+
+test('vaultChunk: denies an unapproved low-severity field without returning indexable text', async () => {
+  const vault = new MockSkyyflowVault();
+  const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
+  const emailOnly = { ...target, fieldsAuthorized: ['email'] };
+  const result = await vaultChunk('c-low', 'Contact jane@example.com or (202) 555-0100.', emailOnly, vault);
+  assert.equal(result.shouldBlock, true);
+  assert.equal(result.vaultedText, null);
+  assert.equal(result.substitutions.length, 0);
+  assert.equal(vault.size(), 0);
+  assert.ok(result.unauthorizedHits.some((hit) => hit.patternName === 'us-phone'));
 });
 
 test('vaultChunk: clean text passes through with zero substitutions', async () => {
@@ -154,4 +178,15 @@ test('vaultChunk: same input is tokenized deterministically (same token across c
   const a = await vaultChunk('c-a', 'Contact: jane@example.com', target, vault);
   const b = await vaultChunk('c-b', 'Contact: jane@example.com', target, vault);
   assert.equal(a.substitutions[0].token, b.substitutions[0].token);
+});
+
+test('vaultChunk: tokenizes every distinct PII value before allowing indexing', async () => {
+  const vault = new MockSkyyflowVault();
+  const target = selectVaultTarget(parseDecisionCard(SAMPLE_DECISION_CARD), 'skyyflow')!;
+  const r = await vaultChunk('multi-email', 'Contact jane@example.com and pat@example.com.', target, vault);
+  assert.ok(r.vaultedText !== null);
+  assert.equal(r.substitutions.length, 2);
+  assert.ok(!r.vaultedText.includes('jane@example.com'));
+  assert.ok(!r.vaultedText.includes('pat@example.com'));
+  assert.equal(r.shouldBlock, false);
 });

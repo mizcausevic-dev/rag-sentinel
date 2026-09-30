@@ -40,6 +40,9 @@ export class MockSkyyflowVault implements SkyyflowVault {
       if (!entry) {
         return { field, token, value: null, disposition: 'denied-no-such-token' };
       }
+      if (entry.field !== field) {
+        return { field, token, value: null, disposition: 'denied-no-such-token' };
+      }
       if (!authorized) {
         return { field, token, value: null, disposition: 'denied-not-authorized' };
       }
